@@ -1,98 +1,83 @@
-import { MongoClient, ObjectId } from 'mongodb';
+import clientPromise from '@/lib/mongodb';
 
-// MongoDB client setup
-const client = new MongoClient(process.env.MONGODB_URI);
-const dbName = process.env.DB_NAME;
+const dbName = process.env.DB_NAME || 'booking-system';
 
 // Handle GET requests (Fetching all bookings)
 export async function GET() {
-  let bookings = [];
-
   try {
-    // Connect to MongoDB
-    await client.connect();
+    const client = await clientPromise;
     const db = client.db(dbName);
     const bookingsCollection = db.collection('bookings');
 
-    // Fetch all bookings
-    bookings = await bookingsCollection.find({}).toArray();
+    const bookings = await bookingsCollection.find({}).sort({ createdAt: -1 }).toArray();
+    return new Response(JSON.stringify(bookings), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Error fetching bookings:', error);
-  } finally {
-    await client.close();
+    return new Response(JSON.stringify({ message: 'Error fetching bookings', error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
-
-  return new Response(JSON.stringify(bookings), { status: 200 });
 }
 
 // Handle POST requests (Creating a new booking)
 export async function POST(req) {
   try {
-    const { workerType, workDescription, quantity, selectedSkill, location, phone } = await req.json();
-
-    // Connect to MongoDB
-    await client.connect();
-    const db = client.db(dbName);
-    const bookingsCollection = db.collection('bookings');
-
-    // Insert a new booking with 'Pending' status
-    const newBooking = {
+    const data = await req.json();
+    const {
+      customerName,
       workerType,
       workDescription,
       quantity,
       selectedSkill,
       location,
       phone,
-      status: 'Pending',  // Initially set to 'Pending'
+      urgency,
+      bookingDate,
+      timeSlot,
+      estimatedPrice,
+    } = data;
+
+    if (!workerType || !workDescription || !location || !phone) {
+      return new Response(
+        JSON.stringify({ message: 'Worker type, description, location and phone are required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const client = await clientPromise;
+    const db = client.db(dbName);
+    const bookingsCollection = db.collection('bookings');
+
+    const newBooking = {
+      customerName: customerName || 'Valued Customer',
+      workerType: workerType || 'unskilled',
+      workDescription,
+      quantity: quantity ? parseInt(quantity, 10) || 1 : 1,
+      selectedSkill: selectedSkill || (workerType === 'unskilled' ? 'General Labor' : 'General Skilled'),
+      location,
+      phone,
+      urgency: urgency || 'Standard',
+      bookingDate: bookingDate || new Date().toISOString().split('T')[0],
+      timeSlot: timeSlot || 'Morning (8 AM - 12 PM)',
+      estimatedPrice: estimatedPrice || null,
+      status: 'Pending',
       createdAt: new Date(),
     };
 
     const result = await bookingsCollection.insertOne(newBooking);
 
     return new Response(
-      JSON.stringify({ bookingId: result.insertedId }),
-      { status: 201 }
+      JSON.stringify({ bookingId: result.insertedId, message: 'Booking created successfully' }),
+      { status: 201, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     return new Response(
       JSON.stringify({ message: 'Error saving booking', error: error.message }),
-      { status: 500 }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
-  } finally {
-    await client.close();
-  }
-}
-
-// Handle PATCH requests (Updating booking status)
-export async function PATCH({ params, request }) {
-  const { id } = params; // Get the booking ID from the URL
-  const { status } = await request.json(); // Get the status update from the request body
-
-  if (!status) {
-    return new Response(JSON.stringify({ message: 'Status is required' }), { status: 400 });
-  }
-
-  try {
-    // Connect to MongoDB
-    await client.connect();
-    const db = client.db(dbName);
-    const bookingsCollection = db.collection('bookings');
-
-    // Find and update the booking with the provided ID
-    const result = await bookingsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { status } }
-    );
-
-    if (result.matchedCount > 0) {
-      return new Response(JSON.stringify({ message: 'Booking status updated successfully' }), { status: 200 });
-    } else {
-      return new Response(JSON.stringify({ message: 'Booking not found' }), { status: 404 });
-    }
-  } catch (error) {
-    console.error('Error updating booking status:', error);
-    return new Response(JSON.stringify({ message: 'Internal server error' }), { status: 500 });
-  } finally {
-    await client.close();
   }
 }

@@ -1,17 +1,32 @@
+import dns from 'dns';
+
+// Fix for Windows DNS resolution
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (e) {
+  // Ignore fallback if not permitted
+}
+
 import { MongoClient } from 'mongodb';
 
-const client = new MongoClient(process.env.MONGODB_URI);
+const uri = process.env.MONGODB_URI || 'mongodb://neeraj:neeraj@cluster0-shard-00-00.a04kx.mongodb.net:27017,cluster0-shard-00-01.a04kx.mongodb.net:27017,cluster0-shard-00-02.a04kx.mongodb.net:27017/?ssl=true&replicaSet=atlas-9qtz3f-shard-0&authSource=admin';
+const options = {};
+
+let client;
 let clientPromise;
 
 if (process.env.NODE_ENV === 'development') {
-  // In development, use a global variable so the MongoDB connection is not repeatedly created during hot reloading
   if (!global._mongoClientPromise) {
+    client = new MongoClient(uri, options);
     global._mongoClientPromise = client.connect();
   }
   clientPromise = global._mongoClientPromise;
 } else {
-  // In production, it's safe to always create a new connection
-  clientPromise = client.connect();
+  if (!global._mongoClientPromise) {
+    client = new MongoClient(uri, options);
+    global._mongoClientPromise = client.connect();
+  }
+  clientPromise = global._mongoClientPromise;
 }
 
 export default clientPromise;

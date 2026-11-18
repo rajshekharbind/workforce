@@ -9,6 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.74.0",
     "mongodb": "^6.10.0",
     "mongoose": "^8.8.1",
     "next": "14.2.5",
